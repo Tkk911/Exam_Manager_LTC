@@ -29,9 +29,6 @@
     footer{font-size:13px;text-align:center;color:#666;padding:20px}
     #card-preview img{max-width:200px;margin-top:8px;border:1px solid #ccc;border-radius:6px}
     mark {background: #ffeb3b; color: #000; padding: 0 2px; border-radius: 3px;}
-    table {width:100%; border-collapse: collapse; margin-top:10px;}
-    th, td {border:1px solid #ccc; padding:6px; text-align:left;}
-    th {background:#e6ee9c;}
   </style>
 </head>
 <body>
@@ -50,7 +47,6 @@
   </header>
 
   <main class="container">
-    <!-- แผงผู้ดูแล -->
     <section id="admin-panel" class="card" style="display:none">
       <h2>แผงควบคุมผู้ดูแลระบบ</h2>
       <label>อัพโหลดไฟล์วิชา (.html)</label>
@@ -69,12 +65,11 @@
       <div id="subject-list" class="subject-list"></div>
       <iframe id="preview-iframe"></iframe>
 
-      <h3>📑 รายการบัตรสอบที่อัปโหลดแล้ว</h3>
-      <button id="btn-refresh-all-cards">รีเฟรช</button>
-      <div id="all-cards"></div>
+      <h3>รายการบัตรสอบที่อัปโหลด</h3>
+      <button id="btn-load-uploads">โหลดรายการไฟล์</button>
+      <div id="upload-list" style="max-height:250px; overflow:auto; border:1px solid #ccc; padding:8px; margin-top:8px;"></div>
     </section>
 
-    <!-- แผงผู้เข้าสอบ -->
     <section id="student-panel" class="card">
       <h2>ผู้เข้าสอบ</h2>
       <label>เลือกวิชา</label>
@@ -91,8 +86,6 @@
       <input type="file" id="exam-card" accept="image/*,.pdf"><br>
       <div id="card-preview"></div><br>
       <button id="btn-upload-card">อัปโหลดบัตรสอบ</button>
-      <button id="btn-view-cards" class="ghost">ดูบัตรสอบที่อัปโหลดแล้ว</button>
-      <div id="uploaded-cards"></div>
       <hr>
 
       <button id="btn-start">เริ่มทำข้อสอบ</button>
@@ -106,9 +99,8 @@
 
   <script>
     const STORAGE_KEY = 'exam_subjects_v1';
-    const CARD_KEY = 'uploaded_cards_v1';
     const DEFAULT_ADMIN_PW = 'admin123';
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbwCauDWYHejqqdymZcDejNrWxe7CTO9coLr5NYuWRGp4jr89FxhPqY7mS_0FO8H284B/exec"; 
+    const GAS_URL = "PUT_YOUR_EXEC_URL_HERE"; // <-- ใส่ URL Web App /exec ที่ deploy
 
     let isAdmin = false;
 
@@ -129,18 +121,15 @@
     const btnUploadCard=document.getElementById('btn-upload-card');
     const examCard=document.getElementById('exam-card');
     const cardPreview=document.getElementById('card-preview');
-    const btnViewCards=document.getElementById('btn-view-cards');
-    const uploadedCards=document.getElementById('uploaded-cards');
     const teacherFilter=document.getElementById('teacher-filter');
     const btnResetFilter=document.getElementById('btn-reset-filter');
-    const btnRefreshAllCards=document.getElementById('btn-refresh-all-cards');
-    const allCards=document.getElementById('all-cards');
+    const btnLoadUploads=document.getElementById("btn-load-uploads");
+    const uploadList=document.getElementById("upload-list");
 
-    function readSubjects(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY))||[] }catch{ return [] } }
+    function readSubjects(){
+      try{ return JSON.parse(localStorage.getItem(STORAGE_KEY))||[] }catch{ return [] }
+    }
     function writeSubjects(list){ localStorage.setItem(STORAGE_KEY,JSON.stringify(list)); }
-
-    function readCards(){ try{ return JSON.parse(localStorage.getItem(CARD_KEY))||[] }catch{ return [] } }
-    function writeCards(list){ localStorage.setItem(CARD_KEY,JSON.stringify(list)); }
 
     function setMode(admin){
       isAdmin=admin;
@@ -148,7 +137,6 @@
         adminPanel.style.display='block';
         modeLabel.textContent='ผู้ดูแลระบบ';
         btnToggleMode.textContent='ออกจากโหมดผู้ดูแล';
-        refreshAllCards();
       }else{
         adminPanel.style.display='none';
         modeLabel.textContent='ผู้เข้าสอบ';
@@ -166,28 +154,6 @@
       } else setMode(false);
     });
 
-    // ==== ส่วน admin ดูบัตรสอบทั้งหมด ====
-    function refreshAllCards(){
-      const cards = readCards();
-      if(cards.length===0){
-        allCards.innerHTML = "<p>❌ ยังไม่มีบัตรสอบที่ถูกอัปโหลด</p>";
-        return;
-      }
-      let html = "<table><tr><th>ผู้เข้าสอบ</th><th>ไฟล์</th><th>เวลา</th><th>ลิงก์</th></tr>";
-      cards.forEach(c=>{
-        html += `<tr>
-                  <td>${c.student}</td>
-                  <td>${c.name}</td>
-                  <td>${c.uploadedAt}</td>
-                  <td><a href="${c.url}" target="_blank">เปิด</a></td>
-                 </tr>`;
-      });
-      html += "</table>";
-      allCards.innerHTML = html;
-    }
-    btnRefreshAllCards.addEventListener("click", refreshAllCards);
-
-    // ==== ส่วนการจัดการวิชา (เหมือนเดิม) ====
     fileInput.addEventListener('change',async ev=>{
       const f=ev.target.files[0];
       if(!f)return;
@@ -261,7 +227,11 @@
     }
 
     teacherFilter.addEventListener('input', refreshSelect);
-    btnResetFilter.addEventListener('click', ()=>{ teacherFilter.value = ''; refreshSelect(); });
+
+    btnResetFilter.addEventListener('click', ()=>{
+      teacherFilter.value = '';
+      refreshSelect();
+    });
 
     btnStart.addEventListener('click',()=>{
       const id=subjectSelect.value;
@@ -274,7 +244,6 @@
       }
     });
 
-    // ==== ส่วนบัตรสอบ ====
     examCard.addEventListener("change", e=>{
       const file=e.target.files[0];
       if(file){
@@ -288,18 +257,20 @@
       }
     });
 
+    // Upload แบบ Base64 JSON
     btnUploadCard.addEventListener("click", async ()=>{
-      const file = examCard.files[0];
-      const student = document.getElementById("student-name").value || "ไม่ระบุชื่อ";
-      if (!file) { 
-        alert("กรุณาเลือกบัตรสอบก่อน"); 
-        return; 
-      }
+      const file=examCard.files[0];
+      const student=document.getElementById("student-name").value||"ไม่ระบุชื่อ";
+      if(!file){ alert("กรุณาเลือกบัตรสอบก่อน"); return; }
 
-      const reader = new FileReader();
+      const reader=new FileReader();
       reader.onload = async () => {
         const base64 = reader.result.split(",")[1];
-        const payload = { student, filename: file.name, data: base64 };
+        const payload = {
+          student: student,
+          filename: file.name,
+          data: base64
+        };
         try {
           const res = await fetch(GAS_URL, {
             method: "POST",
@@ -307,44 +278,36 @@
             headers: { "Content-Type": "application/json" }
           });
           const data = await res.json();
-          if (data.status === "success") {
-            const cards = readCards();
-            cards.push({ student, name: data.name, url: data.fileUrl, uploadedAt: new Date().toLocaleString() });
-            writeCards(cards);
-            cardPreview.innerHTML = `
-              <p>✅ อัปโหลดสำเร็จ</p>
-              <p><strong>ไฟล์:</strong> ${data.name}</p>
-              <p><a href="${data.fileUrl}" target="_blank">เปิดไฟล์ใน Google Drive</a></p>
-            `;
-            refreshAllCards(); // update admin view
-          } else {
-            cardPreview.innerHTML = `<p style="color:red">❌ ผิดพลาด: ${data.message}</p>`;
+          if(data.status==="success"){
+            alert("อัปโหลดสำเร็จ: "+data.fileUrl);
+          }else{
+            alert("ผิดพลาด: "+data.message);
           }
-        } catch (err) {
-          cardPreview.innerHTML = `<p style="color:red">❌ การอัปโหลดล้มเหลว: ${err.message}</p>`;
-        }
+        } catch(err){ alert("การอัปโหลดล้มเหลว: "+err.message); }
       };
       reader.readAsDataURL(file);
     });
 
-    btnViewCards.addEventListener("click", ()=>{
-      const student = document.getElementById("student-name").value || "ไม่ระบุชื่อ";
-      const cards = readCards().filter(c=>c.student===student);
-      if(cards.length===0){
-        uploadedCards.innerHTML = "<p>❌ ยังไม่มีบัตรสอบที่อัปโหลดไว้สำหรับ "+student+"</p>";
-        return;
+    // โหลดรายการไฟล์ที่อัปโหลด (Admin)
+    btnLoadUploads.addEventListener("click", async ()=>{
+      try {
+        const res = await fetch(GAS_URL);
+        const data = await res.json();
+        if(data.status==="success"){
+          uploadList.innerHTML = "";
+          data.files.forEach(f=>{
+            const div = document.createElement("div");
+            div.innerHTML = `<strong>${f.student}</strong> — ${f.name} 
+              <a href="${f.url}" target="_blank">เปิดดู</a>
+              <small style="color:#666"> (${new Date(f.time).toLocaleString()})</small>`;
+            uploadList.appendChild(div);
+          });
+        }else{
+          uploadList.textContent = "ผิดพลาด: " + data.message;
+        }
+      } catch(err){
+        uploadList.textContent = "โหลดไม่สำเร็จ: " + err.message;
       }
-      let html = "<h3>บัตรสอบของ "+student+"</h3>";
-      html += "<table><tr><th>ไฟล์</th><th>เวลาอัปโหลด</th><th>ลิงก์</th></tr>";
-      cards.forEach(c=>{
-        html += `<tr>
-                  <td>${c.name}</td>
-                  <td>${c.uploadedAt}</td>
-                  <td><a href="${c.url}" target="_blank">เปิด</a></td>
-                 </tr>`;
-      });
-      html += "</table>";
-      uploadedCards.innerHTML = html;
     });
 
     setMode(false);
