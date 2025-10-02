@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ระบบจัดการข้อสอบ (Exam Manager) - เพิ่มลิงก์อัปโหลดบัตร</title>
+  <style>
+    :root{
+      --bg:#f9fbe7;
+      --card:#fffde7;
+      --accent:#8bc34a;
+      --accent-dark:#689f38;
+    }
+    body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans Thai",sans-serif;margin:0;background:var(--bg);color:#111}
+    header{background:linear-gradient(90deg,var(--accent),#cddc39);color:#333;padding:10px 20px;display:flex;align-items:center;justify-content:space-between}
+    .header-left{display:flex;align-items:center;gap:12px}
+    .header-left img{height:48px}
+    .container{max-width:1100px;margin:20px auto;padding:18px}
+    .card{background:var(--card);padding:16px;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,0.08);margin-bottom:16px}
+    h1{font-size:20px;margin:0}
+    .flex{display:flex;gap:12px}
+    button{background:var(--accent);color:white;padding:6px 12px;border:0;border-radius:6px;cursor:pointer;transition:background .25s}
+    button:hover{background:var(--accent-dark)}
+    button.ghost{background:transparent;color:var(--accent);border:1px solid rgba(139,195,74,0.6)}
+    input[type=text], input[type=url], input[type=email], textarea, select{width:100%;padding:8px;border:1px solid #ccc;border-radius:6px}
+    .subject-list{max-height:300px;overflow:auto}
+    .subject-item{display:flex;align-items:center;justify-content:space-between;padding:8px;border-bottom:1px solid #dce775}
+    iframe{width:100%;height:400px;border:1px solid #cddc39;border-radius:8px;background:#fff}
+    footer{font-size:13px;text-align:center;color:#666;padding:20px}
+    mark {background: #ffeb3b; color: #000; padding: 0 2px; border-radius: 3px;}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-left">
+      <img src="logoLTC.png" alt="LTC Logo">
+      <div>
+        <h2>ระบบจัดการข้อสอบวิทยาลัยเทคโนโลยีแหลมทอง</h2>
+        <small>แยกโหมด Admin และ ผู้เข้าสอบ</small>
+      </div>
+    </div>
+    <div>
+      โหมด: <strong id="mode-label">ผู้เข้าสอบ</strong>
+      <button id="btn-toggle-mode" class="ghost">เข้าสู่โหมดผู้ดูแล</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <section id="admin-panel" class="card" style="display:none">
+      <h2>แผงควบคุมผู้ดูแลระบบ</h2>
+      <label>อัพโหลดไฟล์วิชา (.html)</label>
+      <input type="file" id="file-input" accept="text/html"><br><br>
+      <label>หรือเพิ่มลิงก์ข้อสอบ (URL)</label>
+      <input type="url" id="subject-link" placeholder="https://..."><br><br>
+      <label>ชื่อวิชา</label>
+      <input type="text" id="subject-title" placeholder="ชื่อวิชา"><br><br>
+      <label>อาจารย์ประจำวิชา</label>
+      <input type="text" id="subject-teacher" placeholder="ชื่ออาจารย์"><br><br>
+      <label>เนื้อหา HTML ของวิชา</label>
+      <textarea id="html-paste" rows="6" placeholder="วางเนื้อหา HTML ของวิชา"></textarea><br><br>
+      <button id="btn-add-subject">เพิ่มเป็นวิชา</button>
+
+      <h3>รายการวิชา</h3>
+      <div id="subject-list" class="subject-list"></div>
+      <iframe id="preview-iframe"></iframe>
+    </section>
+
+    <section id="student-panel" class="card">
+      <h2>ผู้เข้าสอบ</h2>
+      <label>เลือกวิชา</label>
+      <div style="display:flex; gap:6px; align-items:center;">
+        <input type="text" id="teacher-filter" placeholder="ค้นหาตามชื่ออาจารย์">
+        <button id="btn-reset-filter" class="ghost">Reset</button>
+      </div>
+      <select id="subject-select"><option value="">-- เลือกวิชา --</option></select><br><br>
+
+      <label>ชื่อผู้เข้าสอบ</label>
+      <input type="text" id="student-name" placeholder="กรอกชื่อ"><br><br>
+
+      <!-- ปุ่มไปยัง Google Form สำหรับอัปโหลดบัตรสอบ -->
+      <button id="btn-upload-card">อัปโหลดบัตรสอบผ่าน Google Form</button>
+
+      <hr>
+
+      <button id="btn-start" disabled>เริ่มทำข้อสอบ</button>
+      <iframe id="exam-iframe" style="display:none"></iframe>
+    </section>
+
+    <footer>
+      <small>ระบบนี้เก็บข้อมูลในเบราว์เซอร์ (localStorage)</small>
+    </footer>
+  </main>
+
+  <script>
+    const STORAGE_KEY = 'exam_subjects_v1';
+    const DEFAULT_ADMIN_PW = 'admin123';
+
+    let isAdmin = false;
+    let cardUploaded = sessionStorage.getItem('card_uploaded') === 'true';
+
+    const adminPanel=document.getElementById('admin-panel');
+    const btnToggleMode=document.getElementById('btn-toggle-mode');
+    const modeLabel=document.getElementById('mode-label');
+    const fileInput=document.getElementById('file-input');
+    const htmlPaste=document.getElementById('html-paste');
+    const subjectTitle=document.getElementById('subject-title');
+    const subjectTeacher=document.getElementById('subject-teacher');
+    const subjectLink=document.getElementById('subject-link');
+    const btnAdd=document.getElementById('btn-add-subject');
+    const subjectList=document.getElementById('subject-list');
+    const previewIframe=document.getElementById('preview-iframe');
+    const subjectSelect=document.getElementById('subject-select');
+    const btnStart=document.getElementById('btn-start');
+    const examIframe=document.getElementById('exam-iframe');
+    const teacherFilter=document.getElementById('teacher-filter');
+    const btnResetFilter=document.getElementById('btn-reset-filter');
+    const btnUploadCard=document.getElementById('btn-upload-card');
+
+    function readSubjects(){
+      try{ return JSON.parse(localStorage.getItem(STORAGE_KEY))||[] }catch{ return [] }
+    }
+    function writeSubjects(list){ localStorage.setItem(STORAGE_KEY,JSON.stringify(list)); }
+
+    function setMode(admin){
+      isAdmin=admin;
+      if(admin){
+        adminPanel.style.display='block';
+        modeLabel.textContent='ผู้ดูแลระบบ';
+        btnToggleMode.textContent='ออกจากโหมดผู้ดูแล';
+      }else{
+        adminPanel.style.display='none';
+        modeLabel.textContent='ผู้เข้าสอบ';
+        btnToggleMode.textContent='เข้าสู่โหมดผู้ดูแล';
+      }
+      refreshSelect();
+      refreshList();
+    }
+
+    btnToggleMode.addEventListener('click',()=>{
+      if(!isAdmin){
+        const pw=prompt('รหัสผ่านผู้ดูแล (ค่าเริ่มต้น: admin123)');
+        const expected=localStorage.getItem('exam_admin_pw')||DEFAULT_ADMIN_PW;
+        if(pw===expected){ setMode(true);} else alert('รหัสผ่านไม่ถูกต้อง');
+      } else setMode(false);
+    });
+
+    fileInput.addEventListener('change',async ev=>{
+      const f=ev.target.files[0];
+      if(!f)return;
+      const txt=await f.text();
+      htmlPaste.value=txt;
+      subjectTitle.value=f.name.replace(/\.html?/,''); 
+      previewIframe.srcdoc=txt;
+    });
+
+    btnAdd.addEventListener('click',()=>{
+      const html=htmlPaste.value.trim();
+      const link=subjectLink.value.trim();
+      if(!html && !link){alert('กรุณาใส่เนื้อหา HTML หรือ URL');return}
+      let title=subjectTitle.value.trim();
+      if(!title){
+        const m=html.match(/<title>([^<]+)<\/title>/i);
+        if(m) title=m[1]; else title='วิชาใหม่';
+      }
+      const teacher=subjectTeacher.value.trim()||'ไม่ระบุอาจารย์';
+      const list=readSubjects();
+      list.push({id:'s_'+Date.now(),title,teacher,content:html,link});
+      writeSubjects(list);
+      refreshList();
+      refreshSelect();
+      htmlPaste.value='';subjectTitle.value='';subjectTeacher.value='';subjectLink.value='';
+      alert('เพิ่มวิชา: '+title+' ('+teacher+')');
+    });
+
+    function deleteSubject(id){
+      let list=readSubjects().filter(s=>s.id!==id);
+      writeSubjects(list);
+      refreshList();
+      refreshSelect();
+    }
+
+    function refreshList(){
+      subjectList.innerHTML='';
+      readSubjects().forEach(s=>{
+        const d=document.createElement('div');
+        d.className='subject-item';
+        d.innerHTML='<div><strong>'+s.title+'</strong> — <em>'+s.teacher+'</em></div>';
+        const btnDel=document.createElement('button');
+        btnDel.textContent='ลบ';
+        btnDel.className='ghost';
+        btnDel.onclick=()=>{ if(confirm('ลบวิชา '+s.title+' ?')) deleteSubject(s.id); };
+        d.appendChild(btnDel);
+        d.onclick=()=>{
+          if(s.link){ previewIframe.src=s.link; }
+          else{ previewIframe.srcdoc=s.content; }
+        };
+        subjectList.appendChild(d);
+      });
+    }
+
+    function refreshSelect(){
+      subjectSelect.innerHTML='<option value="">-- เลือกวิชา --</option>';
+      const filter = teacherFilter.value.trim().toLowerCase();
+      readSubjects().forEach(s=>{
+        if(!filter || s.teacher.toLowerCase().includes(filter)){
+          const o=document.createElement('option');
+          o.value = s.id;
+          let teacherDisplay = s.teacher;
+          if(filter){
+            const regex = new RegExp(`(${filter})`, 'gi');
+            teacherDisplay = teacherDisplay.replace(regex, '<mark>$1</mark>');
+          }
+          o.innerHTML = s.title + ' (' + teacherDisplay + ')';
+          subjectSelect.appendChild(o);
+        }
+      });
+    }
+
+    teacherFilter.addEventListener('input', refreshSelect);
+
+    btnResetFilter.addEventListener('click', ()=>{
+      teacherFilter.value = '';
+      refreshSelect();
+    });
+
+    btnUploadCard.addEventListener('click',()=>{
+      // ใส่ URL ของ Google Form ที่นี่
+      window.location.href = 'https://forms.gle/2D7kgbRv6tHfXrG26';
+    });
+
+    // เมื่อกลับมาหน้านี้ ให้ถือว่าผู้ใช้ทำการอัปโหลดแล้ว
+    window.addEventListener('load',()=>{
+      const params = new URLSearchParams(window.location.search);
+      if(params.get('uploaded')==='1'){
+        sessionStorage.setItem('card_uploaded','true');
+        cardUploaded = true;
+      }
+      if(cardUploaded){
+        btnStart.disabled = false;
+      }
+    });
+
+    btnStart.addEventListener('click',()=>{
+      const id=subjectSelect.value;
+      if(!id){alert('เลือกวิชา');return}
+      if(!cardUploaded){alert('กรุณาอัปโหลดบัตรสอบก่อน');return;}
+      const s=readSubjects().find(x=>x.id===id);
+      if(s){ 
+        examIframe.style.display='block';
+        if(s.link){ examIframe.src=s.link; }
+        else{ examIframe.srcdoc=s.content; }
+      }
+    });
+
+    setMode(false);
+  </script>
+</body>
+</html>
