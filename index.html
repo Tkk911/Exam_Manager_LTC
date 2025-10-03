@@ -224,11 +224,9 @@
     });
 
     btnUploadCard.addEventListener('click',()=>{
-      // ใส่ URL ของ Google Form ที่นี่
-      window.location.href = 'https://forms.gle/6xh1X4zKqZBb4hLA9';
+      window.location.href = 'https://forms.gle/2D7kgbRv6tHfXrG26';
     });
 
-    // เมื่อกลับมาหน้านี้ ให้ถือว่าผู้ใช้ทำการอัปโหลดแล้ว
     window.addEventListener('load',()=>{
       const params = new URLSearchParams(window.location.search);
       if(params.get('uploaded')==='1'){
@@ -238,6 +236,9 @@
       if(cardUploaded){
         btnStart.disabled = false;
       }
+      // โหลดวิชาที่เคยบันทึกไว้
+      refreshList();
+      refreshSelect();
     });
 
     btnStart.addEventListener('click',()=>{
