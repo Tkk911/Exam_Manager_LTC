@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ระบบจัดการข้อสอบ (Exam Manager) - เพิ่มลิงก์อัปโหลดบัตร</title>
+  <title>ระบบจัดการข้อสอบ (Exam Manager) - เพิ่ม/แก้ไขรายวิชา</title>
   <style>
     :root{
       --bg:#f9fbe7;
@@ -21,7 +21,7 @@
     .flex{display:flex;gap:12px}
     button{background:var(--accent);color:white;padding:6px 12px;border:0;border-radius:6px;cursor:pointer;transition:background .25s}
     button:hover{background:var(--accent-dark)}
-    button.ghost{background:transparent;color:var(--accent);border:1px solid rgba(139,195,74,0.6)}
+    button.ghost{background:transparent;color:var(--accent);border:1px solid rgba(139,195,74,0.6);margin-left:4px}
     input[type=text], input[type=url], input[type=email], textarea, select{width:100%;padding:8px;border:1px solid #ccc;border-radius:6px}
     .subject-list{max-height:300px;overflow:auto}
     .subject-item{display:flex;align-items:center;justify-content:space-between;padding:8px;border-bottom:1px solid #dce775}
@@ -97,6 +97,7 @@
 
     let isAdmin = false;
     let cardUploaded = sessionStorage.getItem('card_uploaded') === 'true';
+    let editingId = null;
 
     const adminPanel=document.getElementById('admin-panel');
     const btnToggleMode=document.getElementById('btn-toggle-mode');
@@ -163,13 +164,27 @@
         if(m) title=m[1]; else title='วิชาใหม่';
       }
       const teacher=subjectTeacher.value.trim()||'ไม่ระบุอาจารย์';
-      const list=readSubjects();
-      list.push({id:'s_'+Date.now(),title,teacher,content:html,link});
+      let list=readSubjects();
+
+      if(editingId){
+        const idx=list.findIndex(s=>s.id===editingId);
+        if(idx>=0){
+          list[idx].title=title;
+          list[idx].teacher=teacher;
+          list[idx].content=html;
+          list[idx].link=link;
+        }
+        editingId=null;
+        btnAdd.textContent="เพิ่มเป็นวิชา";
+        alert('บันทึกการแก้ไขแล้ว');
+      }else{
+        list.push({id:'s_'+Date.now(),title,teacher,content:html,link});
+        alert('เพิ่มวิชา: '+title+' ('+teacher+')');
+      }
       writeSubjects(list);
       refreshList();
       refreshSelect();
       htmlPaste.value='';subjectTitle.value='';subjectTeacher.value='';subjectLink.value='';
-      alert('เพิ่มวิชา: '+title+' ('+teacher+')');
     });
 
     function deleteSubject(id){
@@ -185,11 +200,34 @@
         const d=document.createElement('div');
         d.className='subject-item';
         d.innerHTML='<div><strong>'+s.title+'</strong> — <em>'+s.teacher+'</em></div>';
+        
+        // ปุ่มแก้ไข
+        const btnEdit=document.createElement('button');
+        btnEdit.textContent='แก้ไข';
+        btnEdit.className='ghost';
+        btnEdit.onclick=(e)=>{
+          e.stopPropagation();
+          subjectTitle.value=s.title;
+          subjectTeacher.value=s.teacher;
+          htmlPaste.value=s.content;
+          subjectLink.value=s.link;
+          editingId=s.id;
+          btnAdd.textContent="บันทึกการแก้ไข";
+          if(s.link){ previewIframe.src=s.link; }
+          else{ previewIframe.srcdoc=s.content; }
+        };
+        d.appendChild(btnEdit);
+
+        // ปุ่มลบ
         const btnDel=document.createElement('button');
         btnDel.textContent='ลบ';
         btnDel.className='ghost';
-        btnDel.onclick=()=>{ if(confirm('ลบวิชา '+s.title+' ?')) deleteSubject(s.id); };
+        btnDel.onclick=(e)=>{ 
+          e.stopPropagation();
+          if(confirm('ลบวิชา '+s.title+' ?')) deleteSubject(s.id); 
+        };
         d.appendChild(btnDel);
+
         d.onclick=()=>{
           if(s.link){ previewIframe.src=s.link; }
           else{ previewIframe.srcdoc=s.content; }
@@ -217,26 +255,16 @@
     }
 
     teacherFilter.addEventListener('input', refreshSelect);
-
-    btnResetFilter.addEventListener('click', ()=>{
-      teacherFilter.value = '';
-      refreshSelect();
-    });
-
-    btnUploadCard.addEventListener('click',()=>{
-      window.location.href = 'https://forms.gle/2D7kgbRv6tHfXrG26';
-    });
+    btnResetFilter.addEventListener('click', ()=>{ teacherFilter.value=''; refreshSelect(); });
+    btnUploadCard.addEventListener('click',()=>{ window.location.href='https://forms.gle/2D7kgbRv6tHfXrG26'; });
 
     window.addEventListener('load',()=>{
-      const params = new URLSearchParams(window.location.search);
+      const params=new URLSearchParams(window.location.search);
       if(params.get('uploaded')==='1'){
         sessionStorage.setItem('card_uploaded','true');
-        cardUploaded = true;
+        cardUploaded=true;
       }
-      if(cardUploaded){
-        btnStart.disabled = false;
-      }
-      // โหลดวิชาที่เคยบันทึกไว้
+      if(cardUploaded){ btnStart.disabled=false; }
       refreshList();
       refreshSelect();
     });
